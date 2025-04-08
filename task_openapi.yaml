@@ -1,0 +1,121 @@
+openapi: 3.0.3
+info:
+  title: Events service
+  description: API for managing events lifecycle
+  version: 1.0.0
+
+paths:
+  /v1:
+    get:
+      summary: Get events
+      description: Returns a list of events sorted by start time in descending order
+      parameters:
+        - in: query
+          name: offset
+          schema:
+            type: integer
+          description: Offset of the first event to return
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            maximum: 100
+          description: Number of events to return
+        - in: query
+          name: type
+          schema:
+            type: string
+          description: Filter events by type
+      responses:
+        '200':
+          description: A list of events
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventsResponse'
+
+  /v1/start:
+    post:
+      summary: Start a new event
+      description: Creates a new event of specified type if no unfinished event of this type exists
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EventRequest'
+      responses:
+        '200':
+          description: Event started successfully or already exists
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /v1/finish:
+    post:
+      summary: Finish an existing event
+      description: Marks an unfinished event of specified type as completed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EventRequest'
+      responses:
+        '200':
+          description: Event finished successfully
+        '404':
+          description: No unfinished event of specified type found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  schemas:
+    EventsResponse:
+      type: array
+      items:
+        type: object
+        required:
+          - type
+          - state
+          - startedAt
+        properties:
+          type:
+            type: string
+            description: Event type
+          state:
+            type: string
+            enum: [ started, finished ]
+            description: Event state
+          startedAt:
+            type: string
+            format: date-time
+            description: Event start time
+          finishedAt:
+            type: string
+            format: date-time
+            description: Event finish time, must be empty if state is `started`
+
+    EventRequest:
+      type: object
+      required:
+        - type
+      properties:
+        type:
+          type: string
+          pattern: '^[a-z0-9]+$'
+          description: Event type (lowercase letters and numbers only)
+          example: 'meeting'
+    
+    Error:
+      type: object
+      properties:
+        message:
+          type: string
+          description: Error message
+          example: "Some error message"

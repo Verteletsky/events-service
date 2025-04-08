@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:latest
+    container_name: events-mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+      - mongodb_config:/data/configdb
+      - ./init-replica-set.js:/docker-entrypoint-initdb.d/init-replica-set.js
+    environment:
+      - MONGO_INITDB_DATABASE=${MONGODB_DATABASE:-events}
+    command: mongod --replSet rs0
+    restart: unless-stopped
+
+  mongodb-replica:
+    image: mongo:latest
+    container_name: events-mongodb-replica
+    ports:
+      - "27018:27017"
+    volumes:
+      - mongodb_replica_data:/data/db
+      - mongodb_replica_config:/data/configdb
+    command: mongod --replSet rs0
+    restart: unless-stopped
+
+  events-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: events-service
+    ports:
+      - "${SERVER_PORT:-8080}:${SERVER_PORT:-8080}"
+    environment:
+      - MONGODB_URI=mongodb://mongodb:27017,mongodb-replica:27018/?replicaSet=rs0
+      - MONGODB_DATABASE=${MONGODB_DATABASE:-events}
+      - SERVER_PORT=${SERVER_PORT:-8080}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+    depends_on:
+      - mongodb
+      - mongodb-replica
+    restart: unless-stopped
+
+volumes:
+  mongodb_data:
+    name: events_mongodb_data
+  mongodb_config:
+    name: events_mongodb_config
+  mongodb_replica_data:
+    name: events_mongodb_replica_data
+  mongodb_replica_config:
+    name: events_mongodb_replica_config 
