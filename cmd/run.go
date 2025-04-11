@@ -3,23 +3,30 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
-	"strconv"
 	"syscall"
 	"time"
+
+	"github.com/godev/events-service/internal/config"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 )
 
-func RunServer(router *gin.Engine, port int, log *zap.Logger) {
-	addr := ":" + strconv.Itoa(port)
+func RunServer(router *gin.Engine, cfg *config.Config, log *zap.Logger) {
 	srv := &http.Server{
-		Addr:    addr,
-		Handler: router,
+		Addr:         fmt.Sprintf(":%d", cfg.Server.Port),
+		Handler:      router,
+		ReadTimeout:  10 * time.Second,
+		WriteTimeout: 10 * time.Second,
+		IdleTimeout:  120 * time.Second,
 	}
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 
 	go func() {
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -27,15 +34,12 @@ func RunServer(router *gin.Engine, port int, log *zap.Logger) {
 		}
 	}()
 
-	log.Info("Server started", zap.String("addr", addr))
-
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 	log.Info("Shutting down server...")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+
 	if err := srv.Shutdown(ctx); err != nil {
 		log.Fatal("Server forced to shutdown", zap.Error(err))
 	}

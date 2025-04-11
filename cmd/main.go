@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 
@@ -8,6 +10,7 @@ import (
 	"github.com/godev/events-service/internal/db"
 	"github.com/godev/events-service/internal/handler"
 	"github.com/godev/events-service/internal/logger"
+	"github.com/godev/events-service/internal/queue"
 	mongorepo "github.com/godev/events-service/internal/repository/mongo"
 	"github.com/godev/events-service/internal/service"
 )
@@ -17,9 +20,12 @@ func main() {
 	defer logger.Sync()
 	log := logger.Get()
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	cfg := config.New()
 
-	mongodb, err := db.NewMongoDB(log, &cfg.Mongo)
+	mongodb, err := db.NewMongoDB(ctx, log, &cfg.Mongo)
 	if err != nil {
 		log.Fatal("Failed to initialize MongoDB", zap.Error(err))
 	}
@@ -31,7 +37,11 @@ func main() {
 
 	eventRepo := mongorepo.NewEventRepository(mongodb.GetDatabase())
 	eventService := service.NewEventService(eventRepo)
-	eventHandler := handler.NewEventHandler(eventService)
+
+	eventQueue := queue.NewEventQueue(ctx, eventService, log, 50, 500)
+	defer eventQueue.Close()
+
+	eventHandler := handler.NewEventHandler(eventService, eventQueue)
 
 	router := gin.Default()
 
@@ -42,5 +52,5 @@ func main() {
 		v1.POST("/finish", eventHandler.FinishEvent)
 	}
 
-	RunServer(router, cfg.Server.Port, log)
+	RunServer(router, cfg, log)
 }

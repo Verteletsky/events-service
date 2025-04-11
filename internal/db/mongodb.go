@@ -16,8 +16,8 @@ type MongoDB struct {
 	logger   *zap.Logger
 }
 
-func NewMongoDB(logger *zap.Logger, cfg *config.MongoConfig) (*MongoDB, error) {
-	client, err := mongo.Connect(context.Background(), cfg.Options)
+func NewMongoDB(ctx context.Context, logger *zap.Logger, cfg *config.MongoConfig) (*MongoDB, error) {
+	client, err := mongo.Connect(ctx, cfg.Options)
 	if err != nil {
 		logger.Error("Failed to connect to MongoDB",
 			zap.Error(err),

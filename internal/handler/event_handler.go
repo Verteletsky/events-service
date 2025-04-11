@@ -10,17 +10,20 @@ import (
 
 	"github.com/godev/events-service/internal/logger"
 	"github.com/godev/events-service/internal/model"
+	"github.com/godev/events-service/internal/queue"
 	"github.com/godev/events-service/internal/service"
 )
 
 type EventHandler struct {
 	service service.IEventService
+	queue   *queue.EventQueue
 	log     *zap.Logger
 }
 
-func NewEventHandler(service service.IEventService) *EventHandler {
+func NewEventHandler(service service.IEventService, queue *queue.EventQueue) *EventHandler {
 	return &EventHandler{
 		service: service,
+		queue:   queue,
 		log:     logger.Get(),
 	}
 }
@@ -83,19 +86,14 @@ func (h *EventHandler) StartEvent(c *gin.Context) {
 
 	h.log.Info("Starting event", zap.String("type", req.Type))
 
-	err := h.service.StartEvent(c.Request.Context(), req.Type)
+	err := h.queue.ProcessEvent(c.Request.Context(), req.Type, "start")
 	if err != nil {
-		switch {
-		case errors.Is(err, service.ErrInvalidEventType):
-			c.JSON(http.StatusBadRequest, model.ErrorResponse{Message: err.Error()})
-		default:
-			h.log.Error("Failed to start event", zap.Error(err))
-			c.JSON(http.StatusInternalServerError, model.ErrorResponse{Message: "Failed to start event"})
-		}
+		h.log.Error("Failed to start event", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, model.ErrorResponse{Message: "Failed to start event"})
 		return
 	}
 
-	c.Status(http.StatusOK)
+	c.Status(http.StatusAccepted)
 }
 
 func (h *EventHandler) FinishEvent(c *gin.Context) {
@@ -113,20 +111,12 @@ func (h *EventHandler) FinishEvent(c *gin.Context) {
 
 	h.log.Info("Finishing event", zap.String("type", req.Type))
 
-	err := h.service.FinishEvent(c.Request.Context(), req.Type)
+	err := h.queue.ProcessEvent(c.Request.Context(), req.Type, "finish")
 	if err != nil {
-		switch {
-		case errors.Is(err, service.ErrInvalidEventType):
-			c.JSON(http.StatusBadRequest, model.ErrorResponse{Message: err.Error()})
-		case errors.Is(err, service.ErrEventNotFound):
-			h.log.Warn("No unfinished event found", zap.String("type", req.Type))
-			c.JSON(http.StatusNotFound, model.ErrorResponse{Message: err.Error()})
-		default:
-			h.log.Error("Failed to finish event", zap.Error(err))
-			c.JSON(http.StatusInternalServerError, model.ErrorResponse{Message: "Failed to finish event"})
-		}
+		h.log.Error("Failed to finish event", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, model.ErrorResponse{Message: "Failed to finish event"})
 		return
 	}
 
-	c.Status(http.StatusOK)
+	c.Status(http.StatusAccepted)
 }
